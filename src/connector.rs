@@ -15,6 +15,7 @@ use ct_logs;
 /// A Connector for the `https` scheme.
 #[derive(Clone)]
 pub struct HttpsConnector {
+    hostname_verification: bool,
     http: HttpConnector,
     tls_config: Arc<ClientConfig>,
 }
@@ -32,9 +33,14 @@ impl HttpsConnector {
             .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
         config.ct_logs = Some(&ct_logs::LOGS);
         HttpsConnector {
+            hostname_verification: true,
             http: http,
             tls_config: Arc::new(config),
         }
+    }
+
+    pub fn danger_disable_hostname_verification(&mut self, disable: bool) {
+        self.hostname_verification = !disable;
     }
 }
 
@@ -47,6 +53,7 @@ impl fmt::Debug for HttpsConnector {
 impl From<(HttpConnector, ClientConfig)> for HttpsConnector {
     fn from(args: (HttpConnector, ClientConfig)) -> HttpsConnector {
         HttpsConnector {
+            hostname_verification: true,
             http: args.0,
             tls_config: Arc::new(args.1),
         }
@@ -62,14 +69,18 @@ impl Service for HttpsConnector {
     fn call(&self, uri: Uri) -> Self::Future {
         let is_https = uri.scheme() == Some("https");
         let host: DNSName = match uri.host() {
-            Some(host) => match DNSNameRef::try_from_ascii_str(host) {
-                Ok(host) => host.into(),
-                Err(err) => {
-                    return HttpsConnecting(Box::new(::futures::future::err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("invalid url: {:?}", err),
-                    ))))
+            Some(host) => if self.hostname_verification {
+                match DNSNameRef::try_from_ascii_str(host) {
+                    Ok(host) => host.into(),
+                    Err(err) => {
+                        return HttpsConnecting(Box::new(::futures::future::err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("invalid url: {:?}", err),
+                        ))))
+                    }
                 }
+            } else {
+                DNSNameRef::from_ascii_str_danger(host).into()
             },
             None => {
                 return HttpsConnecting(Box::new(::futures::future::err(io::Error::new(
