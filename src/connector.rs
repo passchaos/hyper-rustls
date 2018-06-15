@@ -69,7 +69,7 @@ impl Service for HttpsConnector {
     fn call(&self, uri: Uri) -> Self::Future {
         let is_https = uri.scheme() == Some("https");
         let host: DNSName = match uri.host() {
-            Some(host) => if self.hostname_verification {
+            Some(host) => if is_https && self.hostname_verification {
                 match DNSNameRef::try_from_ascii_str(host) {
                     Ok(host) => host.into(),
                     Err(err) => {
@@ -87,7 +87,7 @@ impl Service for HttpsConnector {
                     io::ErrorKind::InvalidInput,
                     "invalid url, missing host",
                 ))))
-            }
+            },
         };
         let connecting = self.http.call(uri);
 
