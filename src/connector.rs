@@ -96,7 +96,15 @@ impl Service for HttpsConnector {
             Box::new(
                 connecting
                     .and_then(move |tcp| {
+                        use std::time::Instant;
+                        let begin = Instant::now();
                         tls.connect_async(host.as_ref(), tcp)
+                            .map(move |item| {
+                                let elap = begin.elapsed();
+                                ::hyper::client::set_tls_duration(elap);
+
+                                item
+                            })
                             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
                     })
                     .map(|tls| MaybeHttpsStream::Https(tls))
