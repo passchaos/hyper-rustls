@@ -84,11 +84,11 @@ where
             let connector = TlsConnector::from(cfg);
             let fut = connecting
                 .map(move |(tcp, conn)| (tcp, conn, hostname))
-                .and_then(
-                    |(tcp, conn, hostname)| match DNSNameRef::try_from_ascii_str(&hostname) {
-                        Ok(dnsname) => Ok((tcp, conn, DNSName::from(dnsname))),
-                        Err(_) => Err(io::Error::new(io::ErrorKind::Other, "invalid dnsname")),
-                    },
+                .map(
+                    |(tcp, conn, hostname)| {
+                        let dnsname = DNSNameRef::from_ascii_str_danger(&hostname);
+                        (tcp, conn, DNSName::from(dnsname))
+                    }
                 )
                 .and_then(move |(tcp, conn, dnsname)| {
                     connector.connect(dnsname.as_ref(), tcp)

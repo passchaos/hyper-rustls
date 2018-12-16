@@ -22,3 +22,6 @@ webpki-roots = "0.15"
 
 [dev-dependencies]
 tokio = "0.1"
+
+[replace]
+"webpki:0.18.1" = { git = "https://github.com/passchaos/webpki", rev = "251388" }
