@@ -1,8 +1,8 @@
 use ct_logs;
 use futures::{Future, Poll};
-use hyper::client::connect::{self, Connect};
+use hyper::client::connect::{self, *};
 use hyper::client::HttpConnector;
-use rustls::ClientConfig;
+use rustls::{ClientConfig, Session};
 use std::sync::Arc;
 use std::{fmt, io};
 use tokio_rustls::TlsConnector;
@@ -92,7 +92,15 @@ where
                 )
                 .and_then(move |(tcp, conn, dnsname)| {
                     connector.connect(dnsname.as_ref(), tcp)
-                        .and_then(|tls| Ok((MaybeHttpsStream::Https(tls), conn)))
+                        .and_then(|tls| {
+                            set_alpn_protocol(tls.get_ref().1.get_alpn_protocol());
+                            set_tls_protocol_version(tls.get_ref().1.get_protocol_version()
+                                                     .map(|item| format!("{:?}", item)));
+                            set_tls_cipher_suite(tls.get_ref().1.get_negotiated_ciphersuite()
+                                                 .map(|item| format!("{:?}", item)));
+                            set_tls_finished_ts();
+                            Ok((MaybeHttpsStream::Https(tls), conn))
+                        })
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
                 });
             HttpsConnecting(Box::new(fut))
