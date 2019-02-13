@@ -1,6 +1,6 @@
 use ct_logs;
 use futures::{Future, Poll};
-use hyper::client::connect::{self, Connect};
+use hyper::client::connect::{self, *};
 use hyper::client::HttpConnector;
 use rustls::{ClientConfig, Session};
 use std::sync::Arc;
@@ -84,11 +84,11 @@ where
             let connector = TlsConnector::from(cfg);
             let fut = connecting
                 .map(move |(tcp, conn)| (tcp, conn, hostname))
-                .and_then(
-                    |(tcp, conn, hostname)| match DNSNameRef::try_from_ascii_str(&hostname) {
-                        Ok(dnsname) => Ok((tcp, conn, DNSName::from(dnsname))),
-                        Err(_) => Err(io::Error::new(io::ErrorKind::Other, "invalid dnsname")),
-                    },
+                .map(
+                    |(tcp, conn, hostname)| {
+                        let dnsname = DNSNameRef::from_ascii_str_danger(&hostname);
+                        (tcp, conn, DNSName::from(dnsname))
+                    }
                 )
                 .and_then(move |(tcp, conn, dnsname)| {
                     connector.connect(dnsname.as_ref(), tcp)
@@ -98,6 +98,13 @@ where
                             } else {
                                 conn
                             };
+
+                            set_alpn_protocol(tls.get_ref().1.get_alpn_protocol());
+                            set_tls_protocol_version(tls.get_ref().1.get_protocol_version()
+                                                     .map(|item| format!("{:?}", item)));
+                            set_tls_cipher_suite(tls.get_ref().1.get_negotiated_ciphersuite()
+                                                 .map(|item| format!("{:?}", item)));
+                            set_tls_finished_ts();
                             Ok((MaybeHttpsStream::Https(tls), connected))
                         })
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
