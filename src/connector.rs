@@ -93,18 +93,28 @@ where
                 .and_then(move |(tcp, conn, dnsname)| {
                     connector.connect(dnsname.as_ref(), tcp)
                         .and_then(|tls| {
+                            let alpn = tls.get_ref().1.get_alpn_protocol().map(|s| s.to_string());
+                            let protocol_version = tls.get_ref().1.get_protocol_version().map(|s| format!("{:?}", s));
+                            let cipher_suite = tls.get_ref().1.get_negotiated_ciphersuite().map(|s| format!("{:?}", s));
+
+                            let tls_info = hyper::info::TlsInfo {
+                                alpn,
+                                protocol_version,
+                                cipher_suite,
+                                finished_ts: std::time::Instant::now(),
+                            };
+
+                            let req_id = conn.req_id().to_owned();
+                            hyper::info::set_tls_info(req_id, tls_info.clone());
+
+                            let conn = conn.tls_info(tls_info);
+
                             let connected = if tls.get_ref().1.get_alpn_protocol() == Some("h2") {
                                 conn.negotiated_h2()
                             } else {
                                 conn
                             };
 
-                            set_alpn_protocol(tls.get_ref().1.get_alpn_protocol());
-                            set_tls_protocol_version(tls.get_ref().1.get_protocol_version()
-                                                     .map(|item| format!("{:?}", item)));
-                            set_tls_cipher_suite(tls.get_ref().1.get_negotiated_ciphersuite()
-                                                 .map(|item| format!("{:?}", item)));
-                            set_tls_finished_ts();
                             Ok((MaybeHttpsStream::Https(tls), connected))
                         })
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
